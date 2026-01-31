@@ -1,0 +1,7 @@
+{
+  "name": "Expertise Company God's Eye View",
+  "description": "A high-performance command center for Expertise Contracting Co. to monitor heavy physical assets in real-time using digital twins, predictive AI, and high-fidelity mapping.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
