@@ -31,20 +31,20 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
 
-  // Initialize Assets with Localized Project Sites (Clustered but spread)
+  // Initialize Assets with Localized Project Sites (Balanced Distribution)
   useEffect(() => {
     const initialAssets: Asset[] = Array.from({ length: INITIAL_ASSET_COUNT }).map((_, i) => {
       const site = PROJECT_SITES[i % PROJECT_SITES.length];
       const statusSeed = Math.random();
       let status = AssetStatus.ACTIVE;
       
-      if (statusSeed > 0.97) status = AssetStatus.BREAKDOWN;
-      else if (statusSeed > 0.95) status = AssetStatus.GHOST;
-      else if (statusSeed > 0.85) status = AssetStatus.IDLE;
+      if (statusSeed > 0.96) status = AssetStatus.BREAKDOWN;
+      else if (statusSeed > 0.94) status = AssetStatus.GHOST;
+      else if (statusSeed > 0.82) status = AssetStatus.IDLE;
       
-      // Increased jitter for a "localised but spread" look (0.15 deg instead of 0.04)
-      const jitterLat = (Math.random() - 0.5) * 0.15;
-      const jitterLng = (Math.random() - 0.5) * 0.15;
+      // Adjusted jitter for a "distributed but focused" look (0.35 deg spread)
+      const jitterLat = (Math.random() - 0.5) * 0.35;
+      const jitterLng = (Math.random() - 0.5) * 0.35;
 
       return {
         id: `CRN-${1000 + i}`,
@@ -56,14 +56,14 @@ const App: React.FC = () => {
           site.coords[1] + jitterLng,
         ],
         lastLoad: Date.now() - Math.random() * 86400000,
-        stressScore: status === AssetStatus.BREAKDOWN ? 90 + Math.random() * 10 : Math.floor(Math.random() * 80),
+        stressScore: status === AssetStatus.BREAKDOWN ? 92 + Math.random() * 8 : Math.floor(Math.random() * 75),
         tonnage: [250, 500, 1000][Math.floor(Math.random() * 3)],
         assignedProject: site.name,
         siteName: site.name,
         clientCompany: site.client,
         assignedJob: site.job,
-        lmiValue: status === AssetStatus.IDLE ? Math.random() * 10 : 40 + Math.random() * 60,
-        idleTimeMinutes: status === AssetStatus.IDLE ? Math.floor(Math.random() * 300) : 0,
+        lmiValue: status === AssetStatus.IDLE ? Math.random() * 8 : 45 + Math.random() * 55,
+        idleTimeMinutes: status === AssetStatus.IDLE ? Math.floor(Math.random() * 400) : 0,
         regionId: site.regionId
       };
     });
@@ -74,19 +74,19 @@ const App: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       setAssets(prev => prev.map(asset => {
-        const statusChange = Math.random() > 0.997;
+        const statusChange = Math.random() > 0.998;
         let newStatus = asset.status;
         
         if (statusChange) {
           const rand = Math.random();
-          if (rand > 0.8) newStatus = AssetStatus.BREAKDOWN;
-          else if (rand > 0.6) newStatus = AssetStatus.IDLE;
+          if (rand > 0.75) newStatus = AssetStatus.BREAKDOWN;
+          else if (rand > 0.5) newStatus = AssetStatus.IDLE;
           else if (rand > 0.1) newStatus = AssetStatus.ACTIVE;
           else newStatus = AssetStatus.GHOST;
         }
 
-        const latDrift = (Math.random() - 0.5) * 0.0001;
-        const lngDrift = (Math.random() - 0.5) * 0.0001;
+        const latDrift = (Math.random() - 0.5) * 0.00015;
+        const lngDrift = (Math.random() - 0.5) * 0.00015;
 
         return {
           ...asset,
@@ -102,14 +102,14 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // WIG / Technical Damage Feed Logic
+  // Wildly Important Logic: Focus on DAMAGED and NON-WORKING assets
   useEffect(() => {
     const interval = setInterval(() => {
-      // Prioritize BREAKDOWN status for the feed
+      // Prioritize BREAKDOWN status for the WIG feed
       const criticalAssets = assets
-        .filter(a => a.status === AssetStatus.BREAKDOWN || a.status === AssetStatus.GHOST || a.stressScore > 90)
+        .filter(a => a.status === AssetStatus.BREAKDOWN || a.status === AssetStatus.GHOST || a.stressScore > 88)
         .sort((a, b) => (a.status === AssetStatus.BREAKDOWN ? -1 : 1))
-        .slice(0, 10);
+        .slice(0, 15);
 
       if (criticalAssets.length === 0) return;
       
@@ -121,16 +121,16 @@ const App: React.FC = () => {
       if (target.status === AssetStatus.BREAKDOWN) {
         const failure = FAILURE_TYPES[Math.floor(Math.random() * FAILURE_TYPES.length)];
         type = 'MAINTENANCE_ALERT';
-        message = `SYSTEM FAILURE: ${target.id} at ${target.siteName}. Diagnostics: ${failure}. Unit is non-operational.`;
+        message = `CRITICAL DAMAGE: ${target.id} at ${target.siteName} is DOWN. Reported: ${failure}. Engine/Hydraulic lock engaged.`;
       } else if (target.status === AssetStatus.GHOST) {
         type = 'GHOST_DETECTED';
-        message = `UNAUTHORIZED OPERATION: ${target.id} bypassing GPS geo-fence at ${target.siteName}. Investigate for Ghost Fleet movement.`;
-      } else if (target.stressScore > 90) {
+        message = `GHOST DETECTION: ${target.id} moving without assignment at ${target.siteName}. External entity suspected.`;
+      } else if (target.stressScore > 88) {
         type = 'MAINTENANCE_ALERT';
-        message = `CRITICAL OVERLOAD: ${target.id} reporting ${target.stressScore.toFixed(1)}% hoist tension at ${target.siteName}. Immediate stop recommended.`;
+        message = `STRUCTURAL RISK: ${target.id} at ${target.siteName} reporting ${target.stressScore.toFixed(1)}% tension. Metal fatigue likely.`;
       } else {
         type = 'IDLE_START';
-        message = `Operational efficiency alert for ${target.id} at ${target.siteName}. Low output for ${target.clientCompany}.`;
+        message = `IDLE LOSS: ${target.id} at ${target.siteName} non-productive for 3h+. Asset cost: ${Math.abs(REVENUE_RATE_PER_HOUR[AssetStatus.IDLE])} SAR/H.`;
       }
 
       const newEvent: ActivityEvent = {
@@ -142,7 +142,7 @@ const App: React.FC = () => {
       };
 
       setActivities(prev => [newEvent, ...prev].slice(0, 30));
-    }, 3500);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [assets]);
@@ -205,8 +205,8 @@ const App: React.FC = () => {
           ))}
         </nav>
 
-        {/* Live Feedback Section (WIG) at bottom left */}
-        <div className="mt-auto border-t border-slate-800 h-[45%] flex flex-col overflow-hidden bg-slate-950/80 backdrop-blur-md">
+        {/* Live Feedback Section (WIG) at bottom left (Technical/Damage reports) */}
+        <div className="mt-auto border-t border-slate-800 h-[48%] flex flex-col overflow-hidden bg-slate-950/90 backdrop-blur-md">
           <Sidebar activities={activities} onAssetClick={(id) => {
              const asset = assets.find(a => a.id === id);
              if (asset) {
@@ -253,7 +253,7 @@ const App: React.FC = () => {
                className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 font-bold text-xs mono hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-2 shadow-xl backdrop-blur-md"
              >
                <Globe size={14} />
-               NATIONAL OVERVIEW
+               COLLAPSE NATIONAL OVERVIEW
              </button>
             )}
 
@@ -262,7 +262,7 @@ const App: React.FC = () => {
               className={`p-3 rounded-lg border transition-all flex items-center gap-2 font-bold text-xs mono shadow-xl ${isBoxSelecting ? 'bg-emerald-500 border-emerald-400 text-white' : 'bg-slate-900/95 border-slate-700 text-slate-400 hover:border-slate-500'}`}
             >
               <Crosshair size={18} />
-              {isBoxSelecting ? 'ACTIVE LIDAR SCAN' : 'AREA LASSO'}
+              {isBoxSelecting ? 'ACTIVE LIDAR SCAN' : 'REGION LASSO'}
             </button>
           </div>
 
