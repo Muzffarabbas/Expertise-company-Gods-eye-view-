@@ -70,36 +70,61 @@ const App: React.FC = () => {
     setAssets(initialAssets);
   }, []);
 
-  // Live Telemetry Simulation
+  // Real-time Telemetry via WebSocket
   useEffect(() => {
-    const interval = setInterval(() => {
-      setAssets(prev => prev.map(asset => {
-        const statusChange = Math.random() > 0.998;
-        let newStatus = asset.status;
+    const ws = new WebSocket('ws://localhost:8000/ws');
+
+    ws.onopen = () => {
+      console.log('Connected to Bodhon Industrial Nervous System');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        // data structure: { machine_id, vibration_rms, temperature, status, predicted_rul, ... }
+
+        setAssets(prev => prev.map(asset => {
+          if (asset.id === data.machine_id) {
+            // Map incoming data to Asset state
+            let newStatus = asset.status;
+            if (data.status === 'WARNING') newStatus = AssetStatus.BREAKDOWN;
+            else if (data.vibration_rms < 0.1) newStatus = AssetStatus.IDLE;
+            else newStatus = AssetStatus.ACTIVE;
+
+            return {
+              ...asset,
+              status: newStatus,
+              lmiValue: Math.min(100, data.vibration_rms * 20), // Scale RMS to %
+              stressScore: Math.min(100, Math.max(0, 100 - (data.predicted_rul / 100))), // Inverse RUL to Stress
+            };
+          }
+          return asset;
+        }));
         
-        if (statusChange) {
-          const rand = Math.random();
-          if (rand > 0.75) newStatus = AssetStatus.BREAKDOWN;
-          else if (rand > 0.5) newStatus = AssetStatus.IDLE;
-          else if (rand > 0.1) newStatus = AssetStatus.ACTIVE;
-          else newStatus = AssetStatus.GHOST;
+        // Add activity log for significant events
+        if (data.status === 'WARNING' || data.predicted_rul < 50) {
+             setActivities(prev => {
+                // Prevent duplicate spam
+                if (prev.length > 0 && prev[0].assetId === data.machine_id && prev[0].timestamp.getTime() > Date.now() - 2000) return prev;
+                
+                return [{
+                  id: Math.random().toString(36).substr(2, 9),
+                  assetId: data.machine_id,
+                  timestamp: new Date(),
+                  type: 'MAINTENANCE_ALERT',
+                  message: `ML PREDICTION: RUL ${data.predicted_rul}h. Vib: ${data.vibration_rms.toFixed(2)}`
+               }, ...prev].slice(0, 30);
+             });
         }
 
-        const latDrift = (Math.random() - 0.5) * 0.00015;
-        const lngDrift = (Math.random() - 0.5) * 0.00015;
+      } catch (err) {
+        console.error('WS Parse Error', err);
+      }
+    };
 
-        return {
-          ...asset,
-          status: newStatus,
-          coordinates: [asset.coordinates[0] + latDrift, asset.coordinates[1] + lngDrift],
-          lmiValue: Math.max(0, Math.min(100, asset.lmiValue + (Math.random() - 0.5) * 2)),
-          stressScore: Math.max(0, Math.min(100, asset.stressScore + (Math.random() - 0.5) * 1)),
-          idleTimeMinutes: newStatus === AssetStatus.IDLE ? asset.idleTimeMinutes + 2 : 0
-        };
-      }));
-    }, 2000);
-
-    return () => clearInterval(interval);
+    return () => {
+      ws.close();
+    };
   }, []);
 
   // Wildly Important Logic: Focus on DAMAGED and NON-WORKING assets
