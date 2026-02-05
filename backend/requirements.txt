@@ -1,7 +1,6 @@
 fastapi
-uvicorn[standard]
+uvicorn
 paho-mqtt
-scikit-learn
-pandas
+aiokafka
+kafka-python
 websockets
-python-dotenv

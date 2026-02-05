@@ -2,8 +2,6 @@ import json
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-import paho.mqtt.client as mqtt
-from .ml_model import model
 
 app = FastAPI()
 
@@ -16,10 +14,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# MQTT Config
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
-MQTT_TOPIC = "expertise_bodhon/cranes/vibration"
+# Kafka Config
+KAFKA_BROKER = "localhost:9092"
+KAFKA_TOPIC = "sensor_enriched"
 
 # Store active websocket connections
 class ConnectionManager:
@@ -42,47 +39,41 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# MQTT Client Setup
-def on_mqtt_connect(client, userdata, flags, rc):
-    print(f"Connected to MQTT Broker with result code {rc}")
-    client.subscribe(MQTT_TOPIC)
-
-def on_mqtt_message(client, userdata, msg):
+# Kafka Consumer Background Task
+async def consume_kafka():
+    from aiokafka import AIOKafkaConsumer
+    import json
+    
+    print("Starting Kafka Consumer...")
+    # Retry connection
+    while True:
+        try:
+            consumer = AIOKafkaConsumer(
+                KAFKA_TOPIC,
+                bootstrap_servers=KAFKA_BROKER,
+                group_id="backend_dashboard_group",
+                value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+            )
+            await consumer.start()
+            break
+        except Exception as e:
+            print(f"Waiting for Kafka... ({e})")
+            await asyncio.sleep(5)
+            
     try:
-        payload = json.loads(msg.payload.decode())
-        # print(f"Received MQTT: {payload['machine_id']}")
-        
-        # Run ML Prediction
-        rul = model.predict(payload['vibration_rms'], payload['temperature'])
-        payload['predicted_rul'] = rul
-        
-        # Broadcast to WebSockets (Main loop needs to handle this async)
-        # Since paho-mqtt runs in a separate thread, we can't await directly.
-        # We'll push to an asyncio queue or run_coroutine_threadsafe if we had the loop,
-        # but for simplicity in this mock, let's use a queue or just print for now.
-        # IMPROVEMENT: Use simple global queue used by a background task.
-        asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
+        async for msg in consumer:
+            payload = msg.value
+            # Broadcast to WebSockets
+            await manager.broadcast(payload)
     except Exception as e:
-        print(f"Error processing MQTT message: {e}")
-
-# Global Event Loop
-loop = None
+        print(f"Kafka Consumer Error: {e}")
+    finally:
+        await consumer.stop()
 
 @app.on_event("startup")
 async def startup_event():
-    global loop
-    loop = asyncio.get_running_loop()
-    
-    # Start MQTT Client
-    client = mqtt.Client()
-    client.on_connect = on_mqtt_connect
-    client.on_message = on_mqtt_message
-    
-    try:
-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
-        client.loop_start()
-    except Exception as e:
-        print(f"Failed to connect to MQTT: {e}")
+    # Start Kafka Consumer in background
+    asyncio.create_task(consume_kafka())
 
 @app.get("/")
 def read_root():

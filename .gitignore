@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+mosquitto/data/
+mosquitto/log/
+venv/
+__pycache__/
+*.py[cod]
